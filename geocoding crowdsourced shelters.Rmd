@@ -1,0 +1,100 @@
+---
+title: "importing and geocoding crowdsourced shelters"
+author: "Matthew Ohara"
+date: "2025-05-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+cleans the shelter oepning dataframe, creating opening date information based on available information (year, year-month, year-month-day)
+```{r}
+# cleaning crowd-sourced shelter oepning dataframe
+# creates opening date variables (year, year-month, year-month-day) based on available information 
+# very brute forced, by the power of ai to be honest, but it gets the job done
+
+shelt <- read_csv(paste0(data, "Opening dates of shelters and affordable housing.csv")) %>%
+  rename(
+    opening_og = `opening date (Y-M-D)`,
+    name = Name
+  ) %>%
+  select(name, address, opening_og) %>%
+  mutate(
+    ymd_opening = parse_date_time(opening_og, orders = c("ymd", "Ymd", "Y-m-d"), quiet = TRUE),
+    
+    ym_opening = case_when(
+      str_detect(opening_og, "^\\d{4}-\\d{2}$") ~ format(ymd(paste0(opening_og, "-01")), "%Y-%m"),
+      TRUE ~ format(parse_date_time(opening_og, 
+                                    orders = c("ymd", "Ymd", "Y-m-d", "B Y"), 
+                                    quiet = TRUE), "%Y-%m")
+    ),
+    
+    y_opening = ifelse(!is.na(ym_opening), substr(ym_opening, 1, 4), 
+                       format(parse_date_time(opening_og, 
+                                              orders = c("ymd", "Ymd", "Y-m-d", "B Y", "Y"), 
+                                              quiet = TRUE), "%Y")
+                       )
+  ) %>%
+  drop_na(y_opening)
+
+
+
+# shelt <- read_csv(paste0(data, "Opening dates of shelters and affordable housing.csv")) %>%
+#   rename(opening = `opening date (Y-M-D)`,
+#          name = Name) %>%
+#   select(name, address, opening) %>%
+#   mutate(
+#     ymd_opening = parse_date_time(opening, orders = c("ymd", "Ymd", "Y-m-d"), quiet = TRUE),
+#     ym_opening = format(parse_date_time(opening, 
+#                                         orders = c("ymd", "Ymd", "Y-m-d", "B Y"), 
+#                                         quiet = TRUE), "%Y-%m"),
+#     y_opening = format(parse_date_time(opening, 
+#                                        orders = c("ymd", "Ymd", "Y-m-d", "B Y", "Y"), 
+#                                        quiet = TRUE),"%Y")
+#     
+#     )
+
+```
+matching latitude and longitude to the crowd-sourced shelters
+
+```{r}
+# using tidygeocoder to geocode addresses
+shelt_geo <- shelt %>%
+  geocode(address = address, method = "osm", lat = latitude, long = longitude)
+
+# manually checking addresses that didn't match
+manual_geo = shelt_geo %>% filter(is.na(latitude) | is.na(longitude))
+manual_geo
+
+# manually checked addresses that did not match in tidygeocoder, used google maps
+shelt_geo[shelt_geo$address == "455 S Second St, San Jose, CA 95113", "latitude"] = 37.32969115729079
+shelt_geo[shelt_geo$address == "455 S Second St, San Jose, CA 95113", "longitude"] = -121.88467377443092
+
+shelt_geo[shelt_geo$address == "445 Ofarrell St, San Francisco, CA, 94102", "latitude"] = 37.786032748446395
+shelt_geo[shelt_geo$address == "445 Ofarrell St, San Francisco, CA, 94102", "longitude"] = -122.41210946092082
+
+shelt_geo[shelt_geo$address == "1663 Mission St #225, San Francisco, CA, 94103", "latitude"] = 37.771370528995874
+shelt_geo[shelt_geo$address == "1663 Mission St #225, San Francisco, CA, 94103", "longitude"] = -122.41934996092134
+
+# removing a shelter with no address
+shelt_geo <- shelt_geo[shelt_geo$address != "(Unknown)", ]
+
+# converting to sf object
+shelt_geo_sf <- st_as_sf(shelt_geo %>% drop_na(latitude, longitude), coords = c("longitude", "latitude"), crs = 4326)
+
+#saveRDS(shelt_geo_sf, file=paste0(scrap, "geolocated crowdsourced shelters.Rds"))
+```
+
+```{r}
+tmap_mode("view")
+
+tm_shape(shelt_geo_sf) +
+  tm_dots(
+    col = "red", size = 0.05, alpha = 0.7, popup.vars = c("name", "address", "ym_opening")
+  )
+```
+
+
+

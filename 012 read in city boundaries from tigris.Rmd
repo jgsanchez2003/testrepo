@@ -1,0 +1,29 @@
+
+
+
+Use tigris package to access U.S. census boundaries for relevant cities.
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Load the city boundaries from Census (tigris package)
+  sc_boundary <- tigris::places(state = "CA", cb = TRUE) %>%
+    filter(NAME == "Santa Clara")
+  sf_boundary <- places(state = "CA", cb = TRUE) %>%
+    filter(NAME == "San Francisco")
+  sj_boundary <- places(state = "CA", cb = TRUE) %>%
+    filter(NAME == "San Jose")   
+  oak_boundary <- places(state = "CA", cb = TRUE) %>%
+    filter(NAME == "Oakland")
+  la_boundary <- places(state = "CA", cb = TRUE) %>%
+    filter(NAME == "Los Angeles")
+  
+  st_crs(oak_boundary)
+  st_crs(la_boundary)
+  
+  saveRDS(sc_boundary, file=paste0(scrap, "sc_boundary.Rds"))
+  saveRDS(sf_boundary, file=paste0(scrap, "sf_boundary.Rds"))
+  saveRDS(sj_boundary, file=paste0(scrap, "sj_boundary.Rds"))
+  saveRDS(la_boundary, file=paste0(scrap, "la_boundary.Rds"))
+  saveRDS(oak_boundary, file=paste0(scrap, "oak_boundary.Rds"))
+
+  
+```

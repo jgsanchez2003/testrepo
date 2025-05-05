@@ -1,0 +1,76 @@
+# Clean samples of crime incidents in Santa Clara, San Jose, SF, and Oakland
+# Part of project to visualize crime incident trends around 
+# homeless shelters and affordable housing in Santa Clara
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Run 000 Master script first
+# downloaded and police dept provided crime data processed
+# in Code subfolder Code\scripts that read in crime incident data
+# processed data saved in Data\scrap folder
+```
+
+We read in the data on incidents reported in each city.
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Read in data 
+df_sc <- readRDS(paste0(data, "/crime data from cities/df_sc.Rdata"))
+df_sf <- readRDS(paste0(scrap, "/df_sf.Rdata"))
+df_sj <- readRDS(paste0(data, "/crime data from cities/San Jose/crime_sjx.rds"))
+df_sj <- df_sj  %>% select(-year_x) 
+df_sj <- df_sj %>% mutate(date = lubridate::make_date(year, month, day))
+df_oak <- readRDS(paste0(scrap, "/df_oak.Rdata"))
+df_la <- readRDS(paste0(data, "/crime data from cities/LA_crimes_20_24.Rds"))
+df_sd <- readRDS(paste0(scrap, "df_sd.Rds"))
+
+# sf and sc have geometry, oak and sj and la do not; so set dataframe as class sf (simple features)
+df_oak <- st_as_sf(df_oak, coords = c("lon", "lat"), crs = 4326)
+df_sj <- st_as_sf(df_sj, coords = c("lon", "lat"), crs = 4326)
+df_la <- st_as_sf(df_la, coords = c("LON", "LAT"), crs = 4326)
+
+```
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Fix dates in all dataframes
+
+# Santa Clara
+  # Create year column
+  df_sc$year <- year(df_sc$date)
+   # Create month column
+  df_sc$month <- month(df_sc$date)
+   # Create day column
+  df_sc$day <- day(df_sc$date)
+  # table(df_sc$day)  
+  # table(df_sc$year)
+  # table(df_sc$month)  
+# Oakland 
+# Need to troubleshoot why Oakland data has years <2004 and also goes up to 2025 when thought it stopped 2019
+  df_oak$year <- year(df_oak$date)
+  df_oak<- df_oak %>% filter(year>=2005)
+  #table(df_oak$year)  
+  df_oak$month <- month(df_oak$date)
+  #table(df_oak$month)  
+  df_oak$day <- day(df_oak$date)
+  #table(df_oak$day)   
+  
+# San Francisco
+  df_sf$year <- year(df_sf$`Incident Date`)
+  #table(df_sf$year) 
+  df_sf$date <- as.Date(df_sf$`Incident Date`)
+  df_sf$month <- month(df_sf$`Incident Date`)
+  #table(df_sf$month)   
+  df_sf$day <- day(df_sf$`Incident Date`)
+  #table(df_sf$day)   
+  
+# San Jose (already in right format)
+  #table(df_sj$year) 
+  #table(df_sj$month)  
+  #table(df_sj$day) 
+
+# Los Angeles
+  #table(df_la$year, exclude=NULL)
+  #table(df_la$month, exclude=NULL)
+  #table(df_la$day, exclude=NULL)  
+  
+```
+

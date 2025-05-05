@@ -1,0 +1,81 @@
+# Master script for crime and shelters project
+# Set globals, working directories, and options
+# Load packages
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Clear
+  rm(list = ls())
+# install.packages("mapview")
+# Load necessary packages
+if (!require(pacman)) install.packages('pacman', repos = 'https://cran.rstudio.com')
+pacman::p_load( beepr, broom, dbscan,dtplyr, cowplot, data.table, estimatr, 
+               fuzzyjoin, geosphere, ggpubr, gridExtra, 
+               ggrepel, ggmap, googleAnalyticsR, 
+               gridExtra, ggpubr, grid, knitr, 
+               leaflet, lubridate, mapview, 
+               readr, RColorBrewer, RSocrata, 
+               scales, sf, stringdist, tidycensus, tidyverse, tidyfast, tidygeocoder,
+               tigris, tmap, tmaptools, tm)
+
+# turn off scientific notation except for big numbers, and round decimals
+  options(scipen = 9)
+  options(digits = 3)
+
+# Path to shared Google Drive
+  option1 <- "J:/Shared drives/"
+  option2 <- "G:/Shared drives/"
+  
+  if (file.exists(option1)) {
+    path <- option1
+  } else{
+   if (file.exists(option2)) { 
+     path <- option2
+   }
+  }
+  # path <- "C:/Users/mkevane/Downloads/"
+  code <- paste0(path, "Econ 192 students/Crime incidents and shelter affordable housing locations/Code/")
+  data <- paste0(path, "Econ 192 students/Crime incidents and shelter affordable housing locations/Data/")
+  scrap <- paste0(data, "scrap")
+  base <- paste0(path, "Econ 192 students/Crime incidents and shelter affordable housing locations/") 
+
+  # Clear the working space
+  #rm(list = ls()) 
+  objects_to_keep <- c("path", "code", "scrap", "data")
+  rm(list = setdiff(ls(), objects_to_keep))
+
+  #getwd()
+  source(paste0(code, "util/merge full join with tracking.R"))
+  
+```
+
+Scripts are divided into several folders in the shared Google Drive. A set of folders houses the crime incident data, downloaded from city police websites. The folders also have scripts to read in the datasets, drop variables that are not needed, and save crime incident datasets as .rds files are in those separate folders. the crime incident datasets (original .csv) are very large, and so we keep them apart in order to not run those scripts multiple times.
+
+J:/Shared drives/Police incidents Oakland
+J:/Shared drives/Police incidents San Francisco
+J:/Shared drives/Police incidents San Jose
+J:/Shared drives/Police incidents Santa Clara City
+
+Oakland 2004-2024
+  "The Oakland CrimeWatch dataset is a crime log from law enforcement records between 2004 to 2019"
+  url <- "https://data.oaklandca.gov/api/views/ppgh-7dqv/rows.csv?accessType=DOWNLOAD"
+  Contains lat-long
+  saveRDS(df_oak, file="scrap/df_oak.Rdata")
+
+San Francisco 2018-24
+  Police_Department_Incident_Reports__2018_to_Present_20250106.csv
+  pre-2018 is available (needs to be downloaded)
+  saveRDS(df_sf, file="scrap/df_sf.Rdata")
+
+San Jose 2011-24
+  https://data.sanjoseca.gov/dataset/police-calls-for-service
+  saveRDS(crime_sjx, file=paste0(base, "San Jose/addresses/crime_sjx.rds"))
+
+Santa Clara 2020-24
+  data provided by SCCityPolice (Newell)
+  df <- read_xlsx("data/2020-2024 Calls For Service (Full).xlsx")
+  saveRDS(df_sc, file="data/df_sc.Rdata")
+  
+Los Angeles 2020-24
+  data provided by (website url)
+  
+

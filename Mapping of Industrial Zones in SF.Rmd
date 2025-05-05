@@ -1,0 +1,51 @@
+# Map Industrial Zones for SF and remove hexes that match with those zones for analysis
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Clear
+  rm(list = ls())
+
+# Load necessary packages
+if (!require(pacman)) install.packages('pacman', repos = 'https://cran.rstudio.com')
+pacman::p_load(readr, broom, dtplyr, cowplot, estimatr, knitr, ggpubr, gridExtra, ggrepel, ggmap, googleAnalyticsR, leaflet, sf, tigris, tmap, tmaptools, tm, data.table, tidyverse, tidyfast, gridExtra, ggpubr, grid,  tidycensus, scales, RSocrata, mapview, RColorBrewer)
+
+# turn off scientific notation except for big numbers, and round decimals
+  options(scipen = 9)
+  options(digits = 3)
+```
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Create path 
+  path <- getwd()
+  rm(path)
+  
+```
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+
+land_use <- read_csv("~/Documents/Santa Clara University/Econ/ECON 192 S Quarter/San_Francisco_Land_Use_-_2023_20250504.csv")
+
+
+land_use_sf <- st_as_sf(land_use, wkt = "the_geom", crs = 4326)
+
+
+```
+
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+
+# Filter for parcels with PDR (industrial) use
+industrial_sf <- land_use_sf %>%
+  filter(pdr > 0)
+
+tmap_mode("view")  # switch to interactive map
+
+tm_shape(industrial_sf) +
+  tm_polygons(col = "pdr", style = "quantile", palette = "Blues",
+              title = "Industrial (PDR) Sq Ft") +
+  tm_layout(title = "San Francisco Industrial Parcels")
+  
+``` 
+

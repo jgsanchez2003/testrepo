@@ -1,0 +1,203 @@
+
+```{r setup, include=FALSE}
+# title: "hexagon crime incident counts by time period"
+# author: "Matthew Ohara"
+# date: "2025-04-29"
+# revised 5-4-2025 by MK
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This function finds the crime count per week per hexagon, then creates the corresponding panel df. In order to ensure that the first and last weeks account for crimes in full weeks (no partial weeks), the function shaves a few days off the beginning and end of the crime data when the crime data does not start with Sunday or end with Saturday. A similar method is used for the create_month_panel function.
+
+```{r}
+# first_sunday is the first sunday in the crime data, which represents start of the week
+# last_saturday is the last saturday in the crime data, which represents end of the month
+# for wday(), the indexes are: sun = 1, mon = 2, .... , sat = 7
+
+create_week_panel <- function(crime, hex) {
+  
+  # finding first sunday and last saturday of the whole crime dataset
+  first_sunday <- as.Date(min(crime$date)) + (7 - wday(as.Date(min(crime$date))) + 1) %% 7
+  last_saturday <- max(crime$date) - (wday(max(crime$date)) %% 7)
+  
+  crime_chopped <- crime %>%
+    filter(date >= first_sunday, date <= last_saturday) %>%
+    mutate(week = floor_date(date, unit = "week", week_start = 7))
+  
+  date_range = range(crime_chopped$week)
+  
+  joined <- st_join(crime_chopped, hex)
+  
+  # Count of crimes per grid_id per week
+  crime_counts_wk <- joined %>%
+    st_drop_geometry() %>%
+    count(grid_id, week, name = "n_incidents_wk")
+  
+  all_combos <- expand.grid(
+    grid_id = unique(hex$grid_id),
+    week = seq(date_range[1], date_range[2], by = "week"),
+  stringsAsFactors = FALSE)
+  
+  panel <- all_combos %>%
+    left_join(crime_counts_wk, by = c("grid_id", "week")) %>%
+    mutate(n_incidents_wk = replace_na(n_incidents_wk, 0)) %>%
+   left_join(hex, by = "grid_id") %>%
+    st_as_sf()
+  
+  return(panel)
+}
+
+panel_sc_wk = create_week_panel(df_sc_sm, sc_hex)
+panel_sj_wk = create_week_panel(df_sj_sm, sj_hex)
+panel_sf_wk = create_week_panel(df_sf_sm, sf_hex)
+panel_oak_wk = create_week_panel(df_oak_sm, oak_hex)
+panel_la_wk = create_week_panel(df_la_sm, la_hex)
+
+# saveRDS(panel_sc_wk, file=paste0(scrap, "/panel_sc_wk.Rds"))
+# saveRDS(panel_sj_wk, file=paste0(scrap, "/panel_sj_wk.Rds"))
+# saveRDS(panel_sf_wk, file=paste0(scrap, "/panel_sf_wk.Rds"))
+# saveRDS(panel_oak_wk, file=paste0(scrap, "/panel_oak_wk.Rds"))
+# saveRDS(panel_la_wk, file=paste0(scrap, "/panel_la_wk.Rds"))
+# rm(panel_sc_wk,panel_sj_wk)
+# rm(panel_sf_wk,panel_oak_wk, panel_la_wk)
+#rm(df_la, df_sc, df_sj, df_sf, df_oak)
+```
+
+
+```{r}
+
+create_day_panel <- function(crime, hex) {
+  date_range = range(crime$date, na.rm = TRUE)
+  joined <- st_join(crime, hex)
+  
+  # Count of crimes per grid_id per week
+  crime_counts_day <- joined %>%
+    st_drop_geometry() %>%
+    count(grid_id, date, name = "n_incidents_date")
+  
+  all_combos <- expand.grid(
+    grid_id = unique(hex$grid_id),
+    date = seq(date_range[1], date_range[2], by = "day"),
+  stringsAsFactors = FALSE)
+  
+  panel <- all_combos %>%
+    left_join(crime_counts_day, by = c("grid_id", "date")) %>%
+    mutate(n_incidents_date = replace_na(n_incidents_date, 0)) %>%
+   left_join(hex, by = "grid_id") %>%
+    st_as_sf()
+  
+  return(panel)
+}
+  
+panel_sc_day = create_day_panel(df_sc_sm, sc_hex)
+panel_sf_day = create_day_panel(df_sf_sm, sf_hex)
+panel_oak_day = create_day_panel(df_oak_sm, oak_hex)
+panel_la_day = create_day_panel(df_la_sm, la_hex)
+#panel_sj_day = create_day_panel(df_sj_sm, sj_hex)
+
+saveRDS(panel_sc_day, file=paste0(scrap, "/panel_sc_day.Rds"))
+# saveRDS(panel_sj_day, file=paste0(scrap, "/panel_sj_day.Rds"))
+saveRDS(panel_sf_day, file=paste0(scrap, "/panel_sf_day.Rds"))
+saveRDS(panel_oak_day, file=paste0(scrap, "/panel_oak_day.Rds"))
+saveRDS(panel_la_day, file=paste0(scrap, "/panel_la_day.Rds"))
+
+rm(panel_sc_day,panel_sf_day,panel_oak_day,panel_la_day)
+```
+
+
+This function finds the crime count per month per hexagon, then creates the corresponding panel df.
+```{r}
+create_month_panel <- function(crime, hex) {
+  first_month_start <- floor_date(min(crime$date), unit = "month")
+  last_month_end <- ceiling_date(max(crime$date), unit = "month") - days(1)
+
+  crime_chopped = crime %>%
+    filter(date >= first_month_start, date <= last_month_end) %>%
+    mutate(month_st = floor_date(date, unit = "month"))
+  
+  date_range <- range(crime_chopped$month_st)
+  
+  joined <- st_join(crime_chopped, hex)
+  
+  crime_counts_month <- joined %>%
+    st_drop_geometry() %>%
+    count(grid_id, month_st, name = "n_incidents_month")
+  
+  all_combos <- expand.grid(
+    grid_id = unique(hex$grid_id),
+    month_st = seq(date_range[1], date_range[2], by = "month"),
+  stringsAsFactors = FALSE)
+  
+  panel <- all_combos %>%
+    left_join(crime_counts_month, by = c("grid_id", "month_st")) %>%
+    mutate(n_incidents_month = replace_na(n_incidents_month, 0)) %>%
+    left_join(hex, by = "grid_id") %>%
+    st_as_sf()
+  
+  return(panel)
+}
+
+panel_sc_month = create_month_panel(df_sc_sm, sc_hex)
+panel_sj_month = create_month_panel(df_sj_sm, sj_hex)
+panel_oak_month = create_month_panel(df_oak_sm, oak_hex)
+panel_sf_month = create_month_panel(df_sf_sm, sf_hex)
+panel_la_month = create_month_panel(df_la_sm, la_hex)
+
+# saveRDS(panel_sc_month, file=paste0(scrap, "/panel_sc_month.Rds"))
+# saveRDS(panel_sj_month, file=paste0(scrap, "/panel_sj_month.Rds"))
+# saveRDS(panel_oak_month, file=paste0(scrap, "/panel_oak_month.Rds"))
+# saveRDS(panel_sf_month, file=paste0(scrap, "/panel_sf_month.Rds"))
+# saveRDS(panel_la_month, file=paste0(scrap, "/panel_la_month.Rds"))
+
+rm(panel_sc_month,panel_sj_month,panel_oak_month,panel_sf_month,panel_la_month)
+
+```
+
+
+```{r}
+create_year_panel <- function(crime, hex) {
+  first_year_start <- floor_date(min(crime$date), unit = "year")
+  last_year_end <- ceiling_date(max(crime$date), unit = "year") - days(1)
+  
+  crime_chopped <- crime %>%
+    filter(date >= first_year_start, date <= last_year_end) %>%
+    mutate(year_st = floor_date(date, unit = "year"))
+  
+  date_range <- range(crime_chopped$year_st)
+  
+  joined <- st_join(crime_chopped, hex)
+  
+  crime_counts_year <- joined %>%
+    st_drop_geometry() %>%
+    count(grid_id, year_st, name = "n_incidents_year")
+  
+  all_combos <- expand.grid(
+    grid_id = unique(hex$grid_id),
+    year_st = seq(date_range[1], date_range[2], by = "year"),
+    stringsAsFactors = FALSE
+  )
+  
+  panel <- all_combos %>%
+    left_join(crime_counts_year, by = c("grid_id", "year_st")) %>%
+    mutate(n_incidents_year = replace_na(n_incidents_year, 0)) %>%
+    left_join(hex, by = "grid_id") %>%
+    st_as_sf()
+  
+  return(panel)
+}
+
+panel_sc_year = create_year_panel(df_sc_sm, sc_hex)
+panel_sj_year = create_year_panel(df_sj_sm, sj_hex)
+panel_oak_year = create_year_panel(df_oak_sm, oak_hex)
+panel_sf_year = create_year_panel(df_sf_sm, sf_hex)
+panel_la_year = create_year_panel(df_la_sm, la_hex)
+
+# saveRDS(panel_sc_year, file=paste0(scrap, "/panel_sc_year.Rds"))
+# saveRDS(panel_sj_year, file=paste0(scrap, "/panel_sj_year.Rds"))
+# saveRDS(panel_oak_year, file=paste0(scrap, "/panel_oak_year.Rds"))
+# saveRDS(panel_sf_year, file=paste0(scrap, "/panel_sf_year.Rds"))
+# saveRDS(panel_la_year, file=paste0(scrap, "/panel_la_year.Rds"))
+# 
+# rm(panel_sc_year,panel_sj_year,panel_oak_year,panel_sf_year,panel_la_year)
+```
+

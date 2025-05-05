@@ -1,0 +1,38 @@
+# Basic maps samples of crime incidents in various cities
+# Part of project to visualize crime incident trends around 
+# homeless shelters and affordable housing in Santa Clara
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Run 000 Master script first
+# Run 011 Clean script to load and clean crime incident data
+```
+
+Generate smaller dataframes that are random sample of large crime incident dataframes.
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  # Restrict attention to small random sample to make mapping quicker
+  df_sc_sm <- df_sc[sample(nrow(df_sc), 10000), ]
+  df_sj_sm <- df_sj[sample(nrow(df_sj), 10000), ]
+  df_sf_sm <- df_sf[sample(nrow(df_sf), 10000), ]
+  df_oak_sm <- df_oak[sample(nrow(df_oak), 10000), ]
+  df_la_sm <- df_la[sample(nrow(df_la), 10000), ]
+```
+
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Change crs for some of the city crime incidents data.
+  df_sc_sm <- st_transform(df_sc_sm, crs=4269)
+  df_la_sm <- st_transform(df_la_sm, crs=4269)
+```
+
+Map city boundaries, with dots for locations of crime incidents.
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  tm_shape(sc_boundary) + tm_borders() + tm_shape(df_sc_sm) + tm_dots()
+  tm_shape(sj_boundary) + tm_borders() + tm_shape(df_sj_sm) + tm_dots()
+  tm_shape(sf_boundary) + tm_borders() + tm_shape(df_sf_sm) + tm_dots()
+  tm_shape(oak_boundary) + tm_borders() + tm_shape(df_oak_sm) + tm_dots()
+  tm_shape(la_boundary) + tm_borders() + tm_shape(df_la_sm) + tm_dots()
+
+```
+

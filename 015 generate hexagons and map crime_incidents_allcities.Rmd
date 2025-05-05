@@ -1,0 +1,155 @@
+# Basic maps of samples of crime incidents in various cities
+# Hexagons generated through tiling-tesselation
+# Then count crime incidents in each hexagon
+# (This script uses small random sample, and when counts
+# incident does not do it by year or date)
+# Part of project to visualize crime incident trends around 
+# homeless shelters and affordable housing in California cities
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Run 000 Master script first
+# Run 011 Clean script to load and clean crime incident data
+```
+
+Generate tiling-tesslation for each city.
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Set the cell size for the tesselation (in meters)
+  size_cell = 350
+```
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+#convert crime incident geometry data frame to metrics
+  df_sc_sm = st_transform(df_sc, 3857)
+  df_sj_sm = st_transform(df_sj, 3857)
+  df_sf_sm = st_transform(df_sf, 3857)
+  df_oak_sm = st_transform(df_oak, 3857)
+  df_la_sm = st_transform(df_la, 3857)
+  
+  sc_boundary = readRDS(file=paste0(scrap, "sc_boundary.Rds"))
+  sf_boundary = readRDS(file=paste0(scrap, "sf_boundary.Rds"))
+  sj_boundary = readRDS(file=paste0(scrap, "sj_boundary.Rds"))
+  la_boundary = readRDS(file=paste0(scrap, "la_boundary.Rds"))
+  oak_boundary = readRDS(file=paste0(scrap, "oak_boundary.Rds"))
+```
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  sc_boundary <- st_transform(sc_boundary, 3857)
+# Define hexagonal grid within city boundary
+  sc_hex = st_make_grid(sc_boundary, cellsize = c(size_cell, size_cell), what = "polygons", square = FALSE)
+  st_crs(sc_hex)
+  sc_hex <- st_sf(geometry = sc_hex) %>%mutate(grid_id = 1:length(geometry))
+  sc_hex$centroid <- st_centroid(sc_hex$geometry)
+  sc_hex = sc_hex[sc_boundary, ]  # Clip the grid to city boundary
+  sc_hex <- sc_hex %>% mutate(grid_id = 1:length(geometry))
+```
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+#convert data frame to metrics
+  sj_boundary <- st_transform(sj_boundary, 3857)
+# Define hexagonal grid within city boundary
+  sj_hex = st_make_grid(sj_boundary, cellsize = c(size_cell, size_cell), what = "polygons", square = FALSE)
+  st_crs(sj_hex)
+  sj_hex <- st_sf(geometry = sj_hex) %>%mutate(grid_id = 1:length(geometry))
+  sj_hex$centroid <- st_centroid(sj_hex$geometry)
+  sj_hex = sj_hex[sj_boundary, ]  # Clip the grid to city boundary
+  sj_hex <- sj_hex %>% mutate(grid_id = 1:length(geometry))
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+#convert data frame to metrics
+  sf_boundary <- st_transform(sf_boundary, 3857)
+# Define hexagonal grid within city boundary
+  sf_hex = st_make_grid(sf_boundary, cellsize = c(size_cell, size_cell), what = "polygons", square = FALSE)
+  st_crs(sf_hex)
+  sf_hex <- st_sf(geometry = sf_hex) %>%mutate(grid_id = 1:length(geometry))
+  sf_hex$centroid <- st_centroid(sf_hex$geometry)
+  sf_hex = sf_hex[sf_boundary, ]  # Clip the grid to city boundary
+  sf_hex <- sf_hex %>% mutate(grid_id = 1:length(geometry))
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+#convert data frame to metrics
+  oak_boundary <- st_transform(oak_boundary, 3857)
+# Define hexagonal grid within city boundary
+  oak_hex = st_make_grid(oak_boundary, cellsize = c(size_cell, size_cell), what = "polygons", square = FALSE)
+  st_crs(oak_hex)
+  oak_hex <- st_sf(geometry = oak_hex) %>%mutate(grid_id = 1:length(geometry))
+  oak_hex$centroid <- st_centroid(oak_hex$geometry)
+  oak_hex = oak_hex[oak_boundary, ]  # Clip the grid to city boundary
+  oak_hex <- oak_hex %>% mutate(grid_id = 1:length(geometry))
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+#convert data frame to metrics
+la_boundary <- st_transform(la_boundary, 3857)
+# Define hexagonal grid within city boundary
+  la_hex = st_make_grid(la_boundary, cellsize = c(size_cell, size_cell), what = "polygons", square = FALSE)
+  st_crs(la_hex)
+  la_hex <- st_sf(geometry = la_hex) %>%mutate(grid_id = 1:length(geometry))
+  la_hex$centroid <- st_centroid(la_hex$geometry)
+  la_hex = la_hex[la_boundary, ]  # Clip the grid to city boundary\
+  la_hex <- la_hex %>% mutate(grid_id = 1:length(geometry))
+```  
+  
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Count the number of incidents within each hexagon
+  sj_hex$n_incidents = lengths(st_intersects(sj_hex, df_sj_sm))  
+  sc_hex$n_incidents = lengths(st_intersects(sc_hex, df_sc_sm))   
+  sf_hex$n_incidents = lengths(st_intersects(sf_hex, df_sf_sm))   
+  oak_hex$n_incidents = lengths(st_intersects(oak_hex, df_oak_sm))
+  la_hex$n_incidents = lengths(st_intersects(la_hex, df_la_sm))  
+```
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# May in some cases want to do this
+# Remove grids with no incidents (optional step if you want to focus only on non-empty grids)
+# sc_hex = filter(sc_hex, n_incidents > 0)
+```  
+
+Map the hexagon tiles for each city, shaded by crime incidents.
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  tm_shape(la_hex) +
+  tm_fill(col = "n_incidents", palette = "Reds", style = "cont", title = "No. of incidents",
+    id = "grid_id",showNA = FALSE, alpha = 0.5,
+    popup.vars = c("Number of incidents: " = "n_incidents"),
+    popup.format = list(n_incidents = list(format = "f", digits = 0))) +
+  tm_borders(col = "grey40", lwd = 0.7) + tm_shape(la_boundary) + tm_borders(col = "black", lwd = 1.5)
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  tm_shape(sc_hex) +
+  tm_fill(col = "n_incidents", palette = "Reds", style = "cont", title = "No. of incidents",
+    id = "grid_id",showNA = FALSE, alpha = 0.5,
+    popup.vars = c("Number of incidents: " = "n_incidents"),
+    popup.format = list(n_incidents = list(format = "f", digits = 0))) +
+  tm_borders(col = "grey40", lwd = 0.7) + tm_shape(sc_boundary) + tm_borders(col = "black", lwd = 1.5)
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  tm_shape(sj_hex) +
+  tm_fill(col = "n_incidents", palette = "Reds", style = "cont", title = "No. of incidents",
+    id = "grid_id",showNA = FALSE, alpha = 0.5,
+    popup.vars = c("Number of incidents: " = "n_incidents"),
+    popup.format = list(n_incidents = list(format = "f", digits = 0))) +
+  tm_borders(col = "grey40", lwd = 0.7) + tm_shape(sj_boundary) + tm_borders(col = "black", lwd = 1.5)
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  tm_shape(sf_hex) +
+  tm_fill(col = "n_incidents", palette = "Reds", style = "cont", title = "No. of incidents",
+    id = "grid_id",showNA = FALSE, alpha = 0.5,
+    popup.vars = c("Number of incidents: " = "n_incidents"),
+    popup.format = list(n_incidents = list(format = "f", digits = 0))) +
+  tm_borders(col = "grey40", lwd = 0.7) + tm_shape(sc_boundary) + tm_borders(col = "black", lwd = 1.5)
+```  
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+  tm_shape(oak_hex) +
+  tm_fill(col = "n_incidents", palette = "Reds", style = "cont", title = "No. of incidents",
+    id = "grid_id",showNA = FALSE, alpha = 0.5,
+    popup.vars = c("Number of incidents: " = "n_incidents"),
+    popup.format = list(n_incidents = list(format = "f", digits = 0))) +
+  tm_borders(col = "grey40", lwd = 0.7) + tm_shape(sc_boundary) + tm_borders(col = "black", lwd = 1.5)
+```  

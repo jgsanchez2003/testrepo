@@ -1,0 +1,266 @@
+# Map Industrial Zones for SF and remove hexes that match with those zones for analysis
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Clear
+  rm(list = ls())
+
+# Load necessary packages
+if (!require(pacman)) install.packages('pacman', repos = 'https://cran.rstudio.com')
+pacman::p_load(readr, broom, dtplyr, cowplot, estimatr, knitr, ggpubr, gridExtra, ggrepel, ggmap, googleAnalyticsR, leaflet, sf, tigris, tmap, tmaptools, tm, data.table, tidyverse, tidyfast, gridExtra, ggpubr, grid,  tidycensus, scales, RSocrata, mapview, RColorBrewer)
+
+# turn off scientific notation except for big numbers, and round decimals
+  options(scipen = 9)
+  options(digits = 3)
+```
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Create path 
+  path <- getwd()
+  rm(path)
+  
+```
+
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+
+  # Load in block group data
+  all_bg_data <- readRDS("~/Downloads/all_bg_data_cities.Rds")
+  
+``` 
+
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+
+  # Filter block group data to Los Angeles
+  la_bg <- all_bg_data %>%
+  filter(
+    county  == "Los Angeles"
+  ) %>%
+    rename(
+    Prop_black = black_share,
+    Prop_asian = asian_share,
+    Prop_hispanic = hispanic_share
+  ) %>%
+  filter(!st_is_empty(geometry))
+
+  # Create single boundary for block groups and hex grid
+  la_boundary <- st_union(la_bg)
+  
+  # Create hex grid
+  hex_grid_la <- st_make_grid(
+      la_boundary,
+      cellsize = 3000,    # Adjust as needed
+      square   = FALSE,   # hex
+      what     = "polygons"
+    ) %>%
+      st_sf() %>%
+      st_intersection(la_boundary) %>%
+      mutate(hex_id = row_number())
+
+  # Plot for sanity check
+  ggplot() +
+    geom_sf(data = la_bg, fill = "lightblue", color = "black") +
+    geom_sf(data = hex_grid_la, fill = NA, color = "red") +
+    ggtitle("Block Groups and Hex Grid")
+
+                         
+``` 
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+
+### Intersect and compute area-weighted averages
+  # Create intersections
+  intersections <- st_intersection(
+    hex_grid_la %>% mutate(hex_id = row_number()),
+    la_bg %>% select(GEOID, Prop_black, Prop_asian, Prop_hispanic, median_income)
+  )
+  
+  # Make sure all geometries are valid
+  intersections <- st_make_valid(intersections)
+  
+  # Compute area
+  intersections <- intersections %>%
+    mutate(area = st_area(geometry)) %>%
+    st_drop_geometry()
+
+  # Step 4: Area-weighted aggregation
+  hex_la_weighted <- intersections %>%
+    group_by(hex_id) %>%
+    summarize(
+      Prop_black = sum(Prop_black * as.numeric(area)) / sum(as.numeric(area)),
+      Prop_asian = sum(Prop_asian * as.numeric(area)) / sum(as.numeric(area)),
+      Prop_hispanic = sum(Prop_hispanic * as.numeric(area)) / sum(as.numeric(area)),
+      median_income = sum(median_income * as.numeric(area)) / sum(as.numeric(area))
+    )
+
+  # Join back to hexagons
+  hex_la_weighted_sf <- hex_grid_la %>%
+    mutate(hex_id = row_number()) %>%
+    left_join(hex_la_weighted, by = "hex_id")
+
+``` 
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+  
+  # Load in LA shelters dataset
+  la_shelters <- readRDS("~/Downloads/geocoded_shelters_la.rds") 
+
+```
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+  
+### Merge shelter data with LA hexagons
+  # Transform shelters to match the CRS of the hex grid
+  shelters <- st_transform(la_shelters, crs = st_crs(hex_la_weighted_sf))
+  
+  # Join shelters with the hex it corresponds with
+  hex_with_shelters <- st_join(shelters, hex_la_weighted_sf, join = st_within)
+  
+  # Count shelters per hex
+  shelter_counts <- hex_with_shelters %>%
+    st_drop_geometry() %>%
+    count(hex_id)
+  
+  # Join shelter count to hex grid
+  la_hex_with_shelters <- left_join(hex_la_weighted_sf, shelter_counts, by = "hex_id") %>%
+    rename(num_beds = n)
+
+```
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+  
+  # Plot bed count in each hexagon
+  ggplot(la_hex_with_shelters) +
+    geom_sf(aes(fill = num_beds), color = "grey40") +
+    scale_fill_viridis_c(option = "plasma", na.value = "white") +
+    ggtitle("Number of shelters per Hex Grid (Projected CRS)")
+
+```
+
+
+
+# The next part of this script brings in public land use data. It identifies industrial zones in Los Angeles and maps it. These zones may not be relevant for our analysis.
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+
+land_use <- read_csv("~/Downloads/GENPLAN_PLY_20250504.csv")
+
+
+land_use_sf <- st_as_sf(land_use, wkt = "the_geom", crs = 4326)
+
+
+```
+
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE, results = 'hide'}
+
+
+#Filter for industrial zones in LA
+industrial_zones <- land_use_sf %>%
+  filter(str_detect(tolower(GPLU_DESC), "limited industrial|limited manufacturing|hybrid industrial|light industrial|airport landslide|heavy manufacturing|light manufacturing|commercial manufacturing|commercial industrial|airport landslide support|heavy industrial|general/bulk cargo (hazardous ind. and com.)|lax airport northside|airport airside"))
+
+
+#Map the industrial zones
+tmap_options(check.and.fix = TRUE)
+tmap_mode("view")
+
+tm_shape(industrial_zones) +
+  tm_polygons(col = "GPLU_DESC", palette = "Blues") +
+  tm_layout(title = "Industrial Zones in LA")
+  
+``` 
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+
+
+industrial_zones <- st_transform(industrial_zones, st_crs(hex_grid_la))
+
+# Determine which hexes are fully inside an industrial zone
+fully_inside_industrial <- st_within(hex_grid_la, industrial_zones, sparse = FALSE)
+
+# Find hexes that are fully within at least one industrial zone
+hex_fully_within <- apply(fully_inside_industrial, 1, any)
+
+# Keep only those not fully within industrial zones
+hex_grid_la_cleaned <- hex_grid_la[!hex_fully_within, ]
+
+
+# Subsets
+hex_removed <- hex_grid_la[hex_fully_within, ]
+hex_kept <- hex_grid_la[!hex_fully_within, ]
+
+
+tmap_mode("view")  # or "plot" for static
+
+tm_shape(hex_grid_la) +
+  tm_borders(col = "lightgray") +
+tm_shape(hex_removed) +
+  tm_fill(col = "red", alpha = 0.6, title = "Removed Hexes") +
+tm_shape(industrial_zones) +
+  tm_borders(col = "black", lwd = 1.5) +
+tm_layout(title = "Hexes Fully Inside Industrial Zones (Red)",
+          legend.outside = TRUE)
+```
+
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+
+
+#Intersect hex grid with industrial zones
+hex_industrial_intersection <- st_intersection(hex_grid_la, industrial_zones)
+
+#Calculate area of each intersection
+hex_industrial_intersection <- hex_industrial_intersection %>%
+  mutate(overlap_area = st_area(geometry))
+
+#Calculate area of each hex (join back to get full area)
+hex_with_area <- hex_grid_la %>%
+  mutate(hex_id = row_number(),
+         hex_area = st_area(geometry))
+
+#Join area data to intersections
+hex_industrial_intersection <- hex_industrial_intersection %>%
+  st_join(hex_with_area, join = st_equals, left = TRUE)
+
+#Compute share of hex covered by industrial zone
+hex_industrial_share <- hex_industrial_intersection %>%
+  group_by(hex_id.y) %>%
+  summarize(
+    industrial_overlap = sum(overlap_area),
+    hex_area = first(hex_area)
+  ) %>%
+  mutate(overlap_ratio = as.numeric(industrial_overlap) / as.numeric(hex_area))
+
+#Identify hexes with ≥ 10% coverage
+hex_ids_1_3_or_more <- hex_industrial_share %>%
+  filter(overlap_ratio >= 1/3) %>%
+  pull(hex_id.y)
+
+#Flag those hexes in the original grid
+hex_grid_la_marked <- hex_with_area %>%
+  mutate(
+    industrial_flag = ifelse(hex_id %in% hex_ids_1_3_or_more, "≥ 1/3 Industrial", "< 1/3 Industrial")
+  )
+
+tmap_mode("view")
+
+tm_shape(hex_grid_la_marked) +
+  tm_fill("industrial_flag", palette = c("lightgray", "red"),
+          title = "Industrial Zone Overlap") +
+  tm_borders() +
+  tm_layout(title = "Hexes with ≥ 10% Industrial Zone Coverage",
+            legend.outside = TRUE)
+```
+
+
+
+
+
+
+

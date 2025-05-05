@@ -1,0 +1,42 @@
+# Map Industrial Zones for SF and remove hexes that match with those zones for analysis
+
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# San Francisco
+land_use <- read_csv(paste0(data, "/City Zones/San_Francisco_Land_Use_-_2023_20250504.csv"))
+table(land_use$restype, exclude=NULL)
+land_use$pdr_notzero=!(land_use$pdr==0)
+table(land_use$restype, land_use$pdr_notzero,exclude=NULL)
+range(land_use$pdr[land_use$pdr<50000])
+hist(land_use$pdr[land_use$pdr<1000])
+
+land_use_sf <- st_as_sf(land_use, wkt = "the_geom", crs = 4326)
+# Filter for parcels with PDR (industrial) use
+industrial_sf <- land_use_sf %>% filter(pdr > 0)
+tmap_mode("view")  # switch to interactive map
+
+tm_shape(industrial_sf) +
+  tm_polygons(col = "pdr", style = "quantile", palette = "brewer.blues",
+              title = "Industrial (PDR) Sq Ft") +
+  tm_title("San Francisco Industrial Parcels")
+  
+``` 
+
+```{r echo=T, comment=NA, message=FALSE, warning=FALSE}
+# Los Angeles
+
+land_use <- read_csv(paste0(data, "/City Zones/GENPLAN_PLY_20250504.csv"))
+land_use_la <- st_as_sf(land_use, wkt = "the_geom", crs = 4326)
+
+#Filter for industrial zones in LA
+ind_zone <- land_use_la %>%
+  filter(str_detect(tolower(GPLU_DESC), "limited industrial|limited manufacturing|hybrid industrial|light industrial|airport landslide|heavy manufacturing|light manufacturing|commercial manufacturing|commercial industrial|airport landslide support|heavy industrial|general/bulk cargo (hazardous ind. and com.)|lax airport northside|airport airside"))
+
+#Map the industrial zones
+tmap_mode("view")
+
+tm_shape(ind_zone) +
+  tm_polygons(col = "GPLU_DESC", palette = "brewer.blues") +
+  tm_layout(title = "Industrial Zones in LA")
+```
+

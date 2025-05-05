@@ -1,0 +1,179 @@
+---
+title: "Distance Weighted Shelters"
+author: "Jeevan Brar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r, message=F, warning=F, comment=NA, echo=T }
+# Clear
+  rm(list = ls())
+
+# Set working directory
+    workdir = getwd()
+    setwd(workdir)
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(tmap)
+library(dplyr)
+```
+
+## Load Census Tract Shapes and Shelter Locations
+We load the shelter data and the ACS tract shapefiles for Alameda, Santa Clara, and San Francisco counties and filter the tracts that fall within the boundaries of Oakland, San Jose, and San Francisco. (note: this code snippet was provided by Jose)
+
+```{r pressure, echo=FALSE}
+
+ shelters_sf <- readRDS(file="/Users/jeevanbrar/Desktop/Econ192/WinterQ/geocoded_shelters_sf.Rdata")
+ shelters_scc <- readRDS(file="/Users/jeevanbrar/Desktop/Econ192/WinterQ/geocoded_shelters_scc.Rdata")
+  shelters_oak <- readRDS(file="/Users/jeevanbrar/Desktop/Econ192/WinterQ/geocoded_shelters_oak.Rdata")
+ # Load ACS variables for 2022 5-year estimates
+    v22 <- load_variables(2022, "acs5", cache = TRUE)
+# Load ACS tract shapefiles for Alameda, Santa Clara, and San Francisco counties
+tract_shapes <- get_acs(
+  geography = "tract",
+  variables = "B01001_001",
+  geometry = TRUE,   
+  year = 2022,
+  state = "CA",
+  county = c("Alameda", "Santa Clara", "San Francisco"),
+  output = "wide",   
+  survey = "acs5"
+) %>% 
+  filter(
+    !st_is_empty(geometry),
+    !GEOID %in% c("06075017903","06075980401")) %>%
+  mutate(
+    county_fips = substr(GEOID, 1, 5),
+    county = recode(county_fips, 
+      "06001" = "Alameda",
+      "06085" = "Santa Clara",
+      "06075" = "San Francisco"
+    )
+  ) |>
+  select(GEOID, county, geometry)
+
+# Get city boundaries for Oakland, San Jose, and San Francisco
+city_boundaries <- places(state = "CA", year = 2022, class = "sf") %>%
+  filter(NAME %in% c("Oakland", "San Jose", "San Francisco"))
+
+# Filter tracts within the city boundaries
+city_shapes <- tract_shapes %>%
+  st_filter(city_boundaries)
+```
+
+
+## Convert CRS to be consistent
+```{r, message=F, warning=F, comment=NA, echo=T}
+shelters <- bind_rows(shelters_sf, shelters_oak, shelters_scc)
+# Transform shelters to the same CRS as city_shapes
+shelters <- st_transform(shelters, st_crs(city_shapes))
+
+city_shapes <- city_shapes %>% 
+  mutate(centroid = st_centroid(geometry))
+
+# Compute distance matrix (shelters × centroids) in meters
+distance_matrix <- st_distance(shelters, city_shapes$centroid)
+
+# Find the index of the closest centroid for each shelter
+closest_centroid_index <- apply(distance_matrix, 1, which.min)
+
+# Extract the corresponding minimum distance (in meters)
+closest_distance <- apply(distance_matrix, 1, min)
+
+# Add the closest centroid and distance as new columns in the shelters dataset
+shelters <- shelters %>%
+  mutate(
+    closest_centroid_id = city_shapes$GEOID[closest_centroid_index],  # Assign the GEOID of the closest tract
+    min_distance_meters = closest_distance  # Store the minimum distance
+  )
+
+
+```
+
+
+## View Census Tracts on Map
+```{r, message=F, warning=F, comment=NA, echo=T}
+
+
+# Create a new sf object with line geometries connecting shelters to closest centroids
+shelter_connections <- st_sfc(
+  mapply(function(shelter_point, centroid_point) {
+    st_linestring(rbind(st_coordinates(shelter_point), st_coordinates(centroid_point)))
+  }, st_geometry(shelters), st_geometry(city_shapes$centroid[closest_centroid_index]), SIMPLIFY = FALSE),
+  crs = st_crs(city_shapes)  # Ensure same CRS
+) %>%
+  st_sf(geometry = ., data = shelters %>% select(closest_centroid_id, min_distance_meters))
+
+# Switch to interactive mode
+tmap_mode("view")
+
+# Plot census tract boundaries, centroids, shelters, and connections
+tm_shape(city_shapes) +  
+  tm_borders(lwd = 1, col = "black") +  # Tract boundaries
+  
+  # Plot centroids
+  tm_shape(city_shapes %>% select(centroid)) +  
+  tm_dots(col = "red", size = 0.1, alpha = 0.8, title = "Centroids") +  
+
+  # Plot shelters
+  tm_shape(shelters) +  
+  tm_dots(col = "blue", size = 0.2, alpha = 0.8, title = "Shelters") +  
+
+  # Plot connection lines
+  tm_shape(shelter_connections) +  
+  tm_lines(lwd = 1, col = "gray", alpha = 0.7) +  
+
+  # Map layout
+  tm_layout(title = "Shelter Connections to Closest Census Tract Centroid",
+            legend.outside = TRUE)
+
+```
+
+## Define Distance-Weighted Calculation Function and Implement the function
+```{r, message=F, warning=F, comment=NA, echo=T}
+library(dplyr)
+
+####################################
+# 1) Define the new distance-weight
+####################################
+compute_weight_new <- function(distance_m) {
+  # For 1 mile = ~1609 m => discount = 1/(1 + exp(1))
+  scale_factor <- 1609
+  
+  # Single equation for ALL distances (including inside = 0)
+  # weight = 1/(1 + exp(distance_m / scale_factor))
+  w <- 1 / (1 + exp(distance_m / scale_factor))
+  return(w)
+}
+
+###########################################
+# 2) Apply the new weighting to each shelter
+###########################################
+shelters <- shelters %>%
+  mutate(
+    # Compute the new distance-based weight for each shelter
+    weight = sapply(min_distance_meters, compute_weight_new),
+    
+    # Weighted beds is now simply the bed count times the discount factor
+    weighted_beds = Total.Beds * weight
+  )
+
+#######################################
+# 3) Summarize by "closest_centroid_id"
+#######################################
+exposure_by_tract <- shelters %>%
+  group_by(closest_centroid_id) %>%
+  summarize(
+    exposure = sum(weighted_beds, na.rm = TRUE),
+    number_of_shelters = n()
+  ) %>%
+  ungroup()
+
+# View the results
+print(exposure_by_tract)
+
+```
+
+

@@ -1,0 +1,4 @@
+
+
+# run scripts in folder "scripts that read in crime incident data"
+# eventually use "source" function to run them from this script
